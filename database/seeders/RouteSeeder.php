@@ -71,6 +71,13 @@ class RouteSeeder extends Seeder
             'manage-route-permissions' => 'Manage Route Permissions',
             'manage-user-permissions' => 'Manage User Permissions',
 
+            // UTM Sources Management
+            'manage-utm-sources' => 'Manage UTM Sources',
+            'view-utm-sources' => 'View UTM Sources',
+            'create-utm-sources' => 'Create UTM Sources',
+            'edit-utm-sources' => 'Edit UTM Sources',
+            'delete-utm-sources' => 'Delete UTM Sources',
+
             // Support & Feedback
             'view-support' => 'View Support',
             'submit-feedback' => 'Submit Feedback',
@@ -164,6 +171,15 @@ class RouteSeeder extends Seeder
             'order' => 5,
             'parent_id' => null,
             'permission_id' => $permissions['manage-trackers']->id,
+        ]);
+        $this->createRoute([
+            'name' => 'UTM Sources',
+            'slug' => 'crm-utm-sources',
+            'path' => '/crm/utm-sources',
+            'icon' => 'Share2',
+            'order' => 5,
+            'parent_id' => null,
+            'permission_id' => $permissions['manage-utm-sources']->id,
         ]);
 
         // CRM Settings

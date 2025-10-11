@@ -25,6 +25,16 @@ return new class extends Migration {
             $table->string('port');
             $table->boolean('allow_multiple_clicks')->default(false);
             $table->boolean('proxy_check')->default(false);
+            $table->boolean('vpn_allowed')->default(false);
+            $table->boolean('tor_allowed')->default(false);
+            $table->unsignedTinyInteger('max_risk_score')->default(50);
+            $table->timestamp('expires_at')->nullable();
+            $table->unsignedInteger('daily_cap')->nullable();
+            $table->unsignedInteger('total_cap')->nullable();
+            $table->decimal('payout', 10, 2)->nullable();
+            $table->decimal('revenue', 10, 2)->nullable();
+            $table->json('utm_sources')->nullable();
+
             $table->timestamps();
         });
     }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ClickData;
 use App\Models\Offers;
+use App\Models\Tracker;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -28,6 +29,7 @@ class TrackOfferController extends Controller
         $validator = Validator::make($request->all(), [
             'offer_id' => 'required|exists:offers,id',
             'ref' => 'required|exists:users,id',
+            'utm_id' => 'nullable|exists:utm_sources,id',
             'utm_source' => 'nullable|string|max:100',
             'utm_medium' => 'nullable|string|max:100',
             'utm_campaign' => 'nullable|string|max:100',
@@ -51,21 +53,24 @@ class TrackOfferController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'error',
+                'heading' => 'Error',
                 'message' => 'Validation failed',
                 'errors' => $validator->errors()
             ], 422);
         }
 
-        // Generate a unique click ID
-        $clickId = (string) Str::uuid();
-
         // Get the offer details
-        $offer = Offers::findOrFail($request->offer_id);
+        $offer = Offers::findOrFail($request->offer_id)->load('network.tracker');
 
+        $tracker = Tracker::findOrFail($offer->network->tracker);
+        $param = $tracker->param;
+        // The error was happening because we were returning the offer and then trying to return again
+        // Now we're just retrieving the offer and continuing with the flow
         // Check if offer is expired
         if ($offer->isExpired()) {
             return response()->json([
                 'status' => 'error',
+                'heading' => 'Expired',
                 'message' => 'This offer has expired',
                 'redirect_url' => null
             ], 410);
@@ -75,6 +80,7 @@ class TrackOfferController extends Controller
         if ($offer->hasDailyCapReached()) {
             return response()->json([
                 'status' => 'error',
+                'heading' => 'Cap Reached',
                 'message' => 'This offer has reached its daily cap',
                 'redirect_url' => null
             ], 429);
@@ -83,6 +89,7 @@ class TrackOfferController extends Controller
         if ($offer->hasTotalCapReached()) {
             return response()->json([
                 'status' => 'error',
+                'heading' => 'Cap Reached',
                 'message' => 'This offer has reached its total cap',
                 'redirect_url' => null
             ], 429);
@@ -114,14 +121,21 @@ class TrackOfferController extends Controller
         $vpnDetected = $this->detectVPN($realIp, $ipQualityData);
         $proxyDetected = $ipQualityData['proxy'] ?? false;
         $torDetected = $ipQualityData['tor'] ?? false;
+        $todayClickCount = ClickData::whereDate('created_at', now()->toDateString())->count();
 
+        // Generate a unique click ID based on date format and sequential click count
+        $date = now()->format('dmY');
+        $sequentialNumber = str_pad(($todayClickCount + 1), 4, '0', STR_PAD_LEFT);
+        $clickId = $geoData['country'] . $date . $sequentialNumber;
         // Check if VPN/Proxy/Tor is allowed for this offer
-        if (($vpnDetected && !$offer->isVpnAllowed()) ||
+        if (
+            ($vpnDetected && !$offer->isVpnAllowed()) ||
             ($torDetected && !$offer->isTorAllowed()) ||
             ($proxyDetected && !$offer->proxy_check)
         ) {
             return response()->json([
                 'status' => 'rejected',
+                'heading' => 'Anti-Fraud',
                 'message' => 'Traffic from VPN/Proxy/Tor is not allowed for this offer',
                 'click_id' => $clickId
             ], 403);
@@ -134,6 +148,7 @@ class TrackOfferController extends Controller
         if ($offer->max_risk_score && $ipRiskScore > $offer->max_risk_score) {
             return response()->json([
                 'status' => 'rejected',
+                'heading' => 'Anti-Fraud',
                 'message' => 'Traffic risk score too high for this offer',
                 'click_id' => $clickId
             ], 403);
@@ -141,6 +156,116 @@ class TrackOfferController extends Controller
 
         // Get detailed OS information
         $osInfo = $this->getDetailedOSInfo($agent);
+
+        // Generate realistic UTM parameters if utm_id exists but utm_source doesn't
+        if ($request->has('utm_id') && !$request->has('utm_source')) {
+            // Get the UTM source from the database based on utm_id
+            $utmSource = \App\Models\UtmSources::find($request->utm_id);
+
+            if ($utmSource) {
+                // Use the slug from the UTM source as the utm_source value
+                $sourceSlug = $utmSource->slug;
+
+                // Define UTM parameter options based on the source slug
+                $utmOptions = [
+                    'facebook' => [
+                        'medium' => ['cpc', 'social', 'paid', 'display'],
+                        'campaign' => ['conversion', 'awareness', 'engagement', 'retargeting'],
+                        'content' => ['image_ad', 'carousel_ad', 'video_ad', 'story_ad'],
+                        'term' => ['interest_targeting', 'lookalike', 'custom_audience']
+                    ],
+                    'instagram' => [
+                        'medium' => ['social', 'cpc', 'story', 'influencer'],
+                        'campaign' => ['brand_awareness', 'engagement', 'conversion', 'app_installs'],
+                        'content' => ['feed_post', 'story', 'reel', 'carousel'],
+                        'term' => ['hashtag', 'interest', 'follower_targeting']
+                    ],
+                    'tiktok' => [
+                        'medium' => ['video', 'cpc', 'social', 'influencer'],
+                        'campaign' => ['brand_takeover', 'in_feed', 'hashtag_challenge', 'conversion'],
+                        'content' => ['video_ad', 'spark_ad', 'branded_effect'],
+                        'term' => ['interest', 'behavior', 'age_targeting']
+                    ],
+                    'snapchat' => [
+                        'medium' => ['snap_ad', 'story_ad', 'filter', 'lens'],
+                        'campaign' => ['awareness', 'consideration', 'conversion'],
+                        'content' => ['single_image', 'video', 'collection_ad', 'ar_lens'],
+                        'term' => ['age', 'interest', 'location']
+                    ],
+                    'whatsapp' => [
+                        'medium' => ['message', 'status', 'broadcast', 'group'],
+                        'campaign' => ['business_message', 'promotion', 'announcement', 'customer_service'],
+                        'content' => ['text', 'image', 'video', 'document'],
+                        'term' => ['direct', 'broadcast', 'group_message']
+                    ],
+                    'google' => [
+                        'medium' => ['cpc', 'search', 'display', 'remarketing'],
+                        'campaign' => ['brand', 'generic', 'competitor', 'display_network'],
+                        'content' => ['text_ad', 'responsive_ad', 'banner', 'video'],
+                        'term' => ['exact', 'phrase', 'broad', 'keyword']
+                    ],
+                    'youtube' => [
+                        'medium' => ['video', 'pre_roll', 'mid_roll', 'discovery'],
+                        'campaign' => ['brand_awareness', 'consideration', 'action', 'trueview'],
+                        'content' => ['skippable', 'non_skippable', 'bumper', 'masthead'],
+                        'term' => ['interest', 'topic', 'channel', 'keyword']
+                    ],
+                    'twitter' => [
+                        'medium' => ['promoted_tweet', 'promoted_account', 'promoted_trend'],
+                        'campaign' => ['followers', 'engagement', 'awareness', 'website_clicks'],
+                        'content' => ['text', 'image', 'video', 'carousel'],
+                        'term' => ['keyword', 'interest', 'follower', 'behavior']
+                    ],
+                    'pinterest' => [
+                        'medium' => ['promoted_pin', 'shopping', 'video', 'carousel'],
+                        'campaign' => ['awareness', 'consideration', 'conversion', 'catalog'],
+                        'content' => ['standard_pin', 'video_pin', 'carousel', 'collection'],
+                        'term' => ['interest', 'keyword', 'audience', 'placement']
+                    ],
+                    'linkedin' => [
+                        'medium' => ['sponsored_content', 'message_ad', 'text_ad', 'dynamic'],
+                        'campaign' => ['brand_awareness', 'website_visits', 'engagement', 'lead_generation'],
+                        'content' => ['single_image', 'carousel', 'video', 'document'],
+                        'term' => ['job_title', 'company', 'skills', 'industry']
+                    ]
+                ];
+
+                // If the source slug exists in our options, use it; otherwise use a default or the name
+                $sourceOptions = $utmOptions[$sourceSlug] ?? $utmOptions['google'];
+
+                // Generate truly random UTM parameters with variations
+                $randomSeed = microtime(true) . $realIp . rand(1000, 9999);
+
+                // Select random values for each parameter based on the source
+                $mediumOptions = $sourceOptions['medium'];
+                $campaignOptions = $sourceOptions['campaign'];
+                $contentOptions = $sourceOptions['content'];
+                $termOptions = $sourceOptions['term'];
+
+                // Add random variations to make parameters more unique
+                $campaignSuffix = rand(100, 999);
+                $contentSuffix = substr(md5($randomSeed), 0, 5);
+
+                // Set the UTM parameters with randomization
+                $request->merge([
+                    'utm_source' => $sourceSlug,
+                    'utm_medium' => $mediumOptions[array_rand($mediumOptions)],
+                    'utm_campaign' => $campaignOptions[array_rand($campaignOptions)] . '_' . $campaignSuffix,
+                    'utm_content' => $contentOptions[array_rand($contentOptions)] . '_' . $contentSuffix,
+                    'utm_term' => $termOptions[array_rand($termOptions)]
+                ]);
+
+                // Cache the parameters briefly to avoid identical parameters for same IP in short timeframe
+                $cacheKey = 'utm_params_' . md5($realIp);
+                if (Cache::has($cacheKey)) {
+                    // If we've generated parameters for this IP recently, slightly modify them
+                    $request->merge([
+                        'utm_content' => $request->utm_content . '_v' . rand(2, 9)
+                    ]);
+                }
+                Cache::put($cacheKey, true, now()->addMinutes(5));
+            }
+        }
 
         // Detect traffic source (where the user came from)
         $trafficSource = $this->detectTrafficSource($request);
@@ -170,6 +295,7 @@ class TrackOfferController extends Controller
             if ($recentClick) {
                 return response()->json([
                     'status' => 'duplicate',
+                    'heading' => 'Anti-Fraud',
                     'message' => 'Duplicate click detected',
                     'click_id' => $recentClick->click_id
                 ], 409);
@@ -192,7 +318,6 @@ class TrackOfferController extends Controller
             $utmParams,
             $clickId
         );
-
         // Save the click data to the database
         try {
             $clickData = ClickData::create([
@@ -233,36 +358,93 @@ class TrackOfferController extends Controller
             ]);
 
             // Determine the redirect URL based on device type and offer settings
-            $redirectUrl = $this->getRedirectUrl($offer, $deviceType, $data);
+            // Find the matching device URL from the offer's device_urls
+            $redirectUrl = null;
+            foreach ($offer->device_urls as $deviceUrl) {
+                if ($deviceUrl['deviceType'] === $deviceType) {
+                    $redirectUrl = $deviceUrl['url'];
+                    break;
+                }
+            }
+
+            // If no matching device URL found, fall back to default URL
+            if (!$redirectUrl) {
+                $redirectUrl = $this->getRedirectUrl($offer, $deviceType, $data);
+            }
 
             // Cache the click data for quick lookups (useful for conversion tracking)
             $this->cacheClickData($clickId, $clickData->id);
 
+            // Build base redirect URL with the click ID parameter
+            $baseRedirectUrl = $redirectUrl;
+
+            // Initialize query parameters array with the tracker parameter
+            $queryParams = [$param => $clickId];
+
+            // Add all request parameters to the redirect URL except offer_id and ref
+            foreach ($request->except(['offer_id', 'ref']) as $key => $value) {
+                if (!empty($value)) {
+                    $queryParams[$key] = $value;
+                }
+            }
+
+            // Build the final URL with all parameters properly appended
+            $finalRedirectUrl = $baseRedirectUrl . (parse_url($baseRedirectUrl, PHP_URL_QUERY) ? '&' : '?') . http_build_query($queryParams);
+
             // Return success response with click ID and redirect URL
             return response()->json([
                 'status' => 'success',
+                'heading' => 'Success',
                 'message' => 'Click tracked successfully',
-                'click_id' => $clickId,
-                'redirect_url' => $redirectUrl
+                'redirect_url' => $finalRedirectUrl
             ]);
         } catch (\Exception $e) {
-            // Log the error
-            Log::error('Error tracking click: ' . $e->getMessage(), [
-                'offer_id' => $offer->id,
-                'ref_id' => $request->ref,
-                'ip' => $realIp,
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            // Return error response
             return response()->json([
                 'status' => 'error',
+                'heading' => 'Error',
                 'message' => 'Failed to track click',
                 'error' => app()->environment('production') ? 'Server error' : $e->getMessage()
             ], 500);
         }
     }
+    /**
+     * Get metadata for an offer
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getMetaData(Request $request)
+    {
+        // Validate the request
+        $validator = Validator::make($request->all(), [
+            'offer_id' => 'required|exists:offers,id',
+        ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $offer = Offers::findOrFail($request->offer_id);
+        $metaData = [
+            'title' => $offer->name,
+            'description' => $offer->details,
+            'image' => $offer->image,
+            'url' => $offer->url,
+            'keywords' => $offer->keywords,
+            'author' => $offer->author,
+            'publisher' => $offer->publisher,
+        ];
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Meta data retrieved successfully',
+            'meta_data' => $metaData
+        ], 200);
+    }
     /**
      * Get device type from Agent
      * 
@@ -624,8 +806,8 @@ class TrackOfferController extends Controller
             $clickData->save();
 
             // Return success response
-        return response()->json([
-            'status' => 'success',
+            return response()->json([
+                'status' => 'success',
                 'message' => 'Conversion recorded successfully',
                 'click_id' => $clickData->click_id,
                 'offer_id' => $clickData->offer_id,

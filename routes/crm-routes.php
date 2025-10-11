@@ -8,6 +8,7 @@ use App\Http\Controllers\CRM\Authenticated\TrackersController;
 use App\Http\Controllers\CRM\AUTHENTICATION\AuthenticatedSessionController;
 use App\Http\Controllers\CRM\AUTHENTICATION\RegisterController;
 use App\Http\Controllers\OptionsController;
+use App\Http\Controllers\UtmSourcesController;
 use Illuminate\Support\Facades\Route;
 
 Route::group(['prefix' => 'crm'], function () {
@@ -39,5 +40,7 @@ Route::group(['prefix' => 'crm'], function () {
         Route::apiResource('/users', StaffController::class);
 
         Route::apiResource('/offers', OfferController::class);
+
+        Route::apiResource('/utm-sources', UtmSourcesController::class);
     });
 });

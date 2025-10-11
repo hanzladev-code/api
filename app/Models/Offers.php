@@ -30,7 +30,8 @@ class Offers extends Model
         'total_cap',
         'payout',
         'revenue',
-        'targeting_rules'
+        'targeting_rules',
+        'utm_sources'
     ];
 
     protected $casts = [
@@ -51,7 +52,7 @@ class Offers extends Model
      */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(Staff::class, 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     /**

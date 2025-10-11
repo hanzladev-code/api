@@ -12,10 +12,12 @@ use Illuminate\Support\Facades\Validator;
 class RouteController extends Controller
 {
 
-    public function index()
+    public function index(Request $request)
     {
+        $path = $request->query('path');
         $routes = Route::with(['parent', 'children', 'permission', 'createdBy', 'updatedBy'])
             ->orderBy('order')
+            ->where('path', $path)
             ->get();
 
         return response()->json([

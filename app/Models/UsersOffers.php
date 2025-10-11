@@ -10,6 +10,6 @@ class UsersOffers extends Model
 
     public function user()
     {
-        return $this->belongsTo(Staff::class, 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

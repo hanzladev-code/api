@@ -22,6 +22,7 @@ class OfferController extends Controller
     {
         $user = $request->user();
         $query = Offers::with(['user', 'network.tracker', 'domain']);
+
         $domain_name = $request->query('domain_name');
         if ($domain_name) {
             $query->whereHas('domain', function ($query) use ($domain_name) {
@@ -35,7 +36,7 @@ class OfferController extends Controller
             default => $this->getUsersOffers($query, $user)
         };
 
-        // Get today's date
+        // Get today's date 
         $today = now()->startOfDay();
 
         $offers = $offers->map(function ($offer) use ($user, $today) {
@@ -64,6 +65,16 @@ class OfferController extends Controller
 
             // Calculate revenue
             $offer->revenue = round($todayClicksData->where('converted', true)->sum('payout'), 2);
+
+            // Add UTM sources to the offer
+            if (!empty($offer->utm_sources)) {
+                $utmSourceIds = json_decode($offer->utm_sources, true);
+                if (is_array($utmSourceIds)) {
+                    $offer->utm_sources_data = \App\Models\UtmSources::whereIn('id', $utmSourceIds)->get();
+                }
+            } else {
+                $offer->utm_sources_data = [];
+            }
 
             return $offer;
         });
@@ -242,6 +253,8 @@ class OfferController extends Controller
             'device_urls' => 'required|array',
             'device_urls.*.deviceType' => 'required|string|max:50',
             'device_urls.*.url' => 'required|string|url|max:2048',
+            'utm_sources' => 'nullable|array',
+            'utm_sources.*' => 'required|string|max:50',
         ]);
     }
 

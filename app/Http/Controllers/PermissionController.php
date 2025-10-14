@@ -20,7 +20,7 @@ class PermissionController extends Controller
         $permissions = Permission::with(['createdBy:id,name', 'updatedBy:id,name'])
             ->orderBy('name')
             ->get();
-            
+
         return response()->json([
             'status' => 'success',
             'data' => $permissions
@@ -50,13 +50,13 @@ class PermissionController extends Controller
             'description' => 'nullable|string|max:255',
             'status' => 'boolean',
         ]);
-        
+
         $validated['slug'] = Str::slug($validated['name']);
         $validated['created_by'] = Auth::id();
         $validated['updated_by'] = Auth::id();
-        
+
         $permission = Permission::create($validated);
-        
+
         return response()->json([
             'status' => 'success',
             'message' => 'Permission created successfully',
@@ -73,7 +73,7 @@ class PermissionController extends Controller
     public function show(Permission $permission): JsonResponse
     {
         $permission->load(['createdBy:id,name', 'updatedBy:id,name', 'roles', 'users']);
-        
+
         return response()->json([
             'status' => 'success',
             'data' => $permission
@@ -106,15 +106,15 @@ class PermissionController extends Controller
             'description' => 'nullable|string|max:255',
             'status' => 'sometimes|boolean',
         ]);
-        
+
         if (isset($validated['name'])) {
             $validated['slug'] = Str::slug($validated['name']);
         }
-        
+
         $validated['updated_by'] = Auth::id();
-        
+
         $permission->update($validated);
-        
+
         return response()->json([
             'status' => 'success',
             'message' => 'Permission updated successfully',
@@ -137,7 +137,7 @@ class PermissionController extends Controller
                 'message' => 'Cannot delete permission that is assigned to roles or users'
             ], 422);
         }
-        
+
         // Check if permission is associated with any routes
         if ($permission->routes()->count() > 0) {
             return response()->json([
@@ -145,12 +145,37 @@ class PermissionController extends Controller
                 'message' => 'Cannot delete permission that is assigned to routes'
             ], 422);
         }
-        
+
         $permission->delete();
-        
+
         return response()->json([
             'status' => 'success',
             'message' => 'Permission deleted successfully'
         ]);
+    }
+
+    public function verifyPermission(string $permission): JsonResponse
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthenticated'], 401);
+        }
+
+        $permissionRecord = Permission::where('slug', $permission)->first();
+        if (!$permissionRecord) {
+            return response()->json(['status' => 'error', 'message' => 'Permission not found'], 404);
+        }
+
+        // Get all permissions for this user using the getAllPermissions method
+        $userPermissions = $user->getAllPermissions();
+
+        // Check if the user has the required permission
+        $hasPermission = $userPermissions->contains('slug', $permission);
+
+        if ($hasPermission) {
+            return response()->json(['status' => 'success', 'message' => 'User has the required permission']);
+        } else {
+            return response()->json(['status' => 'error', 'message' => 'User does not have the required permission'], );
+        }
     }
 }

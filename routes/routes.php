@@ -57,5 +57,7 @@ Route::group(['prefix' => 'crm'], function () {
         Route::get('/offers/{offerId}/stats', [TrackOfferController::class, 'offerStats']);
         Route::get('/clicks', [TrackOfferController::class, 'index']);
         Route::get('/clicks/{clickId}', [TrackOfferController::class, 'show']);
+
+        Route::get('/permissions/verify/{permission}', [PermissionController::class, 'verifyPermission']);
     });
 });

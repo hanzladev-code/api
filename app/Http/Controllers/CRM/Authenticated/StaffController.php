@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\CRM\Authenticated;
 
 use App\Http\Controllers\Controller;
-use App\Models\Staff;
 use App\Models\User;
 use App\Models\UsersOffers;
 use Illuminate\Http\Request;
@@ -41,8 +40,8 @@ class StaffController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:staff,email',
-            'phone' => 'required|string|unique:staff,phone',
+            'email' => 'required|email|unique:users,email',
+            'phone' => 'required|string|unique:users,phone',
             'password' => 'required|min:8',
             'role' => 'required|string|in:admin,user',
             'status' => 'required|string|in:active,inactive',
@@ -64,12 +63,12 @@ class StaffController extends Controller
             // Add number if username exists
             $count = 1;
             $originalUsername = $username;
-            while (Staff::where('username', $username)->exists()) {
+            while (User::where('username', $username)->exists()) {
                 $username = $originalUsername . $count;
                 $count++;
             }
 
-            $staff = Staff::create([
+            $staff = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'phone' => $request->phone,
@@ -110,7 +109,7 @@ class StaffController extends Controller
     public function show(string $id)
     {
         try {
-            $staff = Staff::find($id);
+            $staff = User::find($id);
             $offers = UsersOffers::select('offer_ids')->where('user_id', $id)->first();
             $staff->offers = $offers->offer_ids;
             if (!$staff) {
@@ -129,8 +128,8 @@ class StaffController extends Controller
     {
         $request->validate([
             'name' => 'string|max:255',
-            'email' => 'email|unique:staff,email,' . $id,
-            'phone' => 'string|unique:staff,phone,' . $id,
+            'email' => 'email|unique:users,email,' . $id,
+            'phone' => 'string|unique:users,phone,' . $id,
             'password' => 'min:8',
             'role' => 'string|in:admin,user',
             'status' => 'string|in:active,inactive',
@@ -146,7 +145,7 @@ class StaffController extends Controller
         ]);
 
         try {
-            $staff = Staff::find($id);
+            $staff = User::find($id);
             if (!$staff) {
                 return response()->json(['status' => 'error', 'message' => 'Staff not found'], 404);
             }
@@ -182,7 +181,7 @@ class StaffController extends Controller
     public function destroy(string $id)
     {
         try {
-            $staff = Staff::find($id);
+            $staff = User::find($id);
 
             if (!$staff) {
                 return response()->json(['status' => 'error', 'message' => 'Staff not found'], 404);

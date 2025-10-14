@@ -14,10 +14,12 @@ class RouteController extends Controller
 
     public function index(Request $request)
     {
-        $path = $request->query('path');
-        $routes = Route::with(['parent', 'children', 'permission', 'createdBy', 'updatedBy'])
+        $path = $request->query('path') ?? null;
+        $routes = Route::with(['parent', 'children', 'permission', 'createdBy:id,name', 'updatedBy:id,name'])
             ->orderBy('order')
-            ->where('path', $path)
+            ->when($path, function ($query) use ($path) {
+                $query->where('path', $path);
+            })
             ->get();
 
         return response()->json([

@@ -115,6 +115,7 @@ class TrackOfferController extends Controller
         if (strpos($realIp, ',') !== false) {
             $realIp = trim(explode(',', $realIp)[0]);
         }
+        return $realIp;
         $ip = $realIp;
         // Retrieve geolocation data based on the IP address
         $locationData = Location::get($realIp);

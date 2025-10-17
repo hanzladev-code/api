@@ -98,7 +98,7 @@ class TrackOfferController extends Controller
         // When hosted on Vercel or similar platforms, request->ip() may return the server IP instead of client IP
         // This happens because the request passes through Vercel's infrastructure before reaching our app
         $ip = $request->ip();
-        
+
         // Check for common proxy headers that might contain the real client IP
         $realIp = $request->header('X-Forwarded-For');
         if (empty($realIp)) {
@@ -111,12 +111,11 @@ class TrackOfferController extends Controller
             // If no valid IP found in headers, fall back to the request IP
             $realIp = $ip;
         }
-        
         // If X-Forwarded-For contains multiple IPs, get the first one (client IP)
         if (strpos($realIp, ',') !== false) {
             $realIp = trim(explode(',', $realIp)[0]);
         }
-
+        $ip = $realIp;
         // Retrieve geolocation data based on the IP address
         $locationData = Location::get($realIp);
 

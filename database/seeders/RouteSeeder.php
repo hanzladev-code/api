@@ -221,8 +221,8 @@ class RouteSeeder extends Seeder
             'slug' => 'crm-settings-advanced',
             'path' => '/',
             'icon' => 'Cog6Tooth',
-            'order' => 3,
-            'parent_id' => $settings->id,
+            'order' => 7,
+            'parent_id' => null,
             'permission_id' => $permissions['manage-advanced-settings']->id,
         ]);
 
@@ -253,7 +253,7 @@ class RouteSeeder extends Seeder
             'path' => '/',
             'icon' => 'ShieldCheck',
             'order' => 4,
-            'parent_id' => $settings->id,
+            'parent_id' => null,
             'permission_id' => $permissions['manage-permissions']->id,
         ]);
 

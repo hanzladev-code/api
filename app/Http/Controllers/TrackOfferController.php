@@ -99,9 +99,23 @@ class TrackOfferController extends Controller
         // This happens because the request passes through Vercel's infrastructure before reaching our app
         $ip = $request->ip();
         
-        // Use advanced IP detection to get the real client IP address
-        // This handles proxies, load balancers, and CDN infrastructure like Vercel
-        $realIp = $this->getRealIpAddress($request);
+        // Check for common proxy headers that might contain the real client IP
+        $realIp = $request->header('X-Forwarded-For');
+        if (empty($realIp)) {
+            $realIp = $request->header('CF-Connecting-IP'); // Cloudflare
+        }
+        if (empty($realIp)) {
+            $realIp = $request->header('X-Real-IP');
+        }
+        if (empty($realIp) || filter_var($realIp, FILTER_VALIDATE_IP) === false) {
+            // If no valid IP found in headers, fall back to the request IP
+            $realIp = $ip;
+        }
+        
+        // If X-Forwarded-For contains multiple IPs, get the first one (client IP)
+        if (strpos($realIp, ',') !== false) {
+            $realIp = trim(explode(',', $realIp)[0]);
+        }
 
         // Retrieve geolocation data based on the IP address
         $locationData = Location::get($realIp);

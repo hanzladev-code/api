@@ -97,8 +97,11 @@ class TrackOfferController extends Controller
 
         // When hosted on Vercel or similar platforms, request->ip() may return the server IP instead of client IP
         // This happens because the request passes through Vercel's infrastructure before reaching our app
-        $realIp = $request->ip();
-        $ip = $realIp;
+        $ip = $request->ip();
+        
+        // Use advanced IP detection to get the real client IP address
+        // This handles proxies, load balancers, and CDN infrastructure like Vercel
+        $realIp = $this->getRealIpAddress($request);
 
         // Retrieve geolocation data based on the IP address
         $locationData = Location::get($realIp);

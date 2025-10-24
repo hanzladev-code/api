@@ -187,4 +187,61 @@ class RouteController extends Controller
             'data' => $permissions
         ]);
     }
+    public function bulkUpdate(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'data' => 'required|array',
+            'data.*.id' => 'required|exists:routes,id',
+            'data.*.name' => 'nullable|string|max:255',
+            'data.*.slug' => 'nullable|string|max:255',
+            'data.*.path' => 'nullable|string|max:255',
+            'data.*.description' => 'nullable|string',
+            'data.*.icon' => 'nullable|string|max:255',
+            'data.*.order' => 'nullable|string',
+            'data.*.parent_id' => 'nullable|exists:routes,id',
+            'data.*.permission_id' => 'nullable|exists:permissions,id',
+            'data.*.status' => 'nullable',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $affected = 0;
+        $userId = Auth::id();
+
+        // Update each route individually from the data array
+        foreach ($request->data as $routeData) {
+            if (isset($routeData['id'])) {
+                $route = Route::find($routeData['id']);
+                if ($route) {
+                    $updateData = array_filter($routeData, function ($value, $key) {
+                        // Exclude id, created_by, updated_by fields and null values
+                        return !in_array($key, ['id', 'created_by', 'updated_by']) && $value !== null;
+                    }, ARRAY_FILTER_USE_BOTH);
+                    
+                    // Make sure we're storing just the ID as an integer for updated_by
+                    if ($userId) {
+                        $updateData['updated_by'] = (int)$userId;
+                    }
+                    
+                    // Use update without timestamps to avoid issues with created_at/updated_at
+                    $route->timestamps = false;
+                    $route->update($updateData);
+                    $route->timestamps = true;
+                    
+                    $affected++;
+                }
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "{$affected} routes updated successfully"
+        ]);
+    }
 }

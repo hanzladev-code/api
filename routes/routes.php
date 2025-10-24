@@ -20,6 +20,7 @@ Route::group(['prefix' => 'crm'], function () {
         Route::post('/routes', [RouteController::class, 'store']);
         Route::put('/routes/{route}', [RouteController::class, 'update']);
         Route::delete('/routes/{route}', [RouteController::class, 'destroy']);
+        Route::post('/routes/bulk-update', [RouteController::class, 'bulkUpdate']);
 
         // Roles management
         Route::apiResource('/roles', RoleController::class);

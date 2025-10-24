@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\FilesController;
-use App\Http\Controllers\RedirectController;
 use App\Http\Controllers\TrackOfferController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -13,10 +12,10 @@ Route::get('/user', function (Request $request) {
 Route::apiResource('/files', FilesController::class);
 
 
+Route::get('/get-meta-data', [TrackOfferController::class, 'getMetaData']); 
 Route::group(['middleware' => ['guest']], function () {
     // Tracking and conversion endpoints (no authentication required)
     Route::get('/track-offer', [TrackOfferController::class, 'store']);
-    Route::get('/get-meta-data', [TrackOfferController::class, 'getMetaData']);
     Route::post('/conversion', [TrackOfferController::class, 'conversion']);
 });
 

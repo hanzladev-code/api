@@ -12,10 +12,9 @@ Route::get('/user', function (Request $request) {
 Route::apiResource('/files', FilesController::class);
 
 
-Route::get('/get-meta-data', [TrackOfferController::class, 'getMetaData']); 
+Route::get('/get-meta-data', [TrackOfferController::class, 'getMetaData']);
+Route::get('/track-offer', [TrackOfferController::class, 'store']);
 Route::group(['middleware' => ['guest']], function () {
-    // Tracking and conversion endpoints (no authentication required)
-    Route::get('/track-offer', [TrackOfferController::class, 'store']);
     Route::post('/conversion', [TrackOfferController::class, 'conversion']);
 });
 

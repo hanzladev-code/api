@@ -64,8 +64,6 @@ class TrackOfferController extends Controller
 
         $tracker = Tracker::findOrFail($offer->network->tracker);
         $param = $tracker->param;
-        // The error was happening because we were returning the offer and then trying to return again
-        // Now we're just retrieving the offer and continuing with the flow
         // Check if offer is expired
         if ($offer->isExpired()) {
             return response()->json([

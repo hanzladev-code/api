@@ -1062,7 +1062,16 @@ class TrackOfferController extends Controller
      */
     private function getRealIpAddress(Request $request)
     {
-        // Check for CloudFlare IP
+        // Log all headers for debugging
+        Log::debug('Request Headers: ' . json_encode($request->headers->all()));
+        Log::debug('Server Variables: ' . json_encode($_SERVER));
+        
+        // Check for client-side provided headers (from our frontend)
+        if ($request->header('X-Client-IP') && $request->header('X-Client-IP') !== 'true') {
+            return $request->header('X-Client-IP');
+        }
+        
+        // Check for CloudFlare IP (most reliable if using CloudFlare)
         if ($request->header('CF-Connecting-IP')) {
             return $request->header('CF-Connecting-IP');
         }
@@ -1072,21 +1081,94 @@ class TrackOfferController extends Controller
             return $request->header('True-Client-IP');
         }
 
-        // Check X-Forwarded-For header
+        // Check for Fastly-specific headers
+        if ($request->header('Fastly-Client-IP')) {
+            return $request->header('Fastly-Client-IP');
+        }
+
+        // Check for Akamai headers
+        if ($request->header('True-Client-Ip')) {
+            return $request->header('True-Client-Ip');
+        }
+
+        // Check X-Forwarded-For header (common in many proxy setups)
         if ($request->header('X-Forwarded-For')) {
             $xForwardedFor = explode(',', $request->header('X-Forwarded-For'));
-            return trim($xForwardedFor[0]);
+            return trim($xForwardedFor[0]); // First IP is the client
         }
 
         // Check X-Real-IP header
         if ($request->header('X-Real-IP')) {
             return $request->header('X-Real-IP');
         }
+        
+        // Check for Fly.io headers
+        if ($request->header('Fly-Client-IP')) {
+            return $request->header('Fly-Client-IP');
+        }
+        
+        // Check for Heroku headers
+        if ($request->header('X-Forwarded-For-Original')) {
+            return $request->header('X-Forwarded-For-Original');
+        }
+        
+        // Check for AWS ELB/ALB headers
+        if (isset($_SERVER['HTTP_X_CLUSTER_CLIENT_IP'])) {
+            return $_SERVER['HTTP_X_CLUSTER_CLIENT_IP'];
+        }
+        
+        // Check for Vercel headers
+        if ($request->header('X-Vercel-Forwarded-For')) {
+            $forwardedIps = explode(',', $request->header('X-Vercel-Forwarded-For'));
+            return trim($forwardedIps[0]);
+        }
+        
+        // Check for Netlify headers
+        if ($request->header('X-Netlify-Original-IP')) {
+            return $request->header('X-Netlify-Original-IP');
+        }
 
         // Fallback to the standard IP method
-        return app()->environment('production')
-            ? $request->ip()
-            : env('FALLBACK_IP_ADDRESS', '169.197.85.173');
+        $ip = $request->ip();
+        
+        // If we're in production but got a private/local IP, use a fallback
+        if (app()->environment('production') && $this->isPrivateIP($ip)) {
+            return env('FALLBACK_IP_ADDRESS', '169.197.85.173');
+        }
+        
+        return $ip;
+    }
+    
+    /**
+     * Check if an IP address is private/local
+     * 
+     * @param string $ip
+     * @return bool
+     */
+    private function isPrivateIP($ip)
+    {
+        $privateRanges = [
+            '10.0.0.0|10.255.255.255',     // 10.0.0.0/8
+            '172.16.0.0|172.31.255.255',   // 172.16.0.0/12
+            '192.168.0.0|192.168.255.255', // 192.168.0.0/16
+            '169.254.0.0|169.254.255.255', // 169.254.0.0/16
+            '127.0.0.0|127.255.255.255',   // 127.0.0.0/8
+        ];
+        
+        $ipLong = ip2long($ip);
+        
+        if ($ipLong === false) {
+            return true; // Invalid IP, treat as private
+        }
+        
+        foreach ($privateRanges as $range) {
+            list($start, $end) = explode('|', $range);
+            if ($ipLong >= ip2long($start) && $ipLong <= ip2long($end)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -1098,6 +1180,14 @@ class TrackOfferController extends Controller
     private function getProxyCheckData($ip)
     {
         try {
+            // Cache key for this IP to avoid repeated API calls
+            $cacheKey = 'proxycheck_' . md5($ip);
+            
+            // Check if we have cached results for this IP
+            if (Cache::has($cacheKey)) {
+                return Cache::get($cacheKey);
+            }
+            
             $apiKey = env('PROXYCHECK_API_KEY') ?? '33812r-47v9z6-b5i430-i83158';
 
             if (!$apiKey) {
@@ -1107,8 +1197,8 @@ class TrackOfferController extends Controller
                 ];
             }
 
-            // Make request to ProxyCheck.io API
-            $response = Http::get("https://proxycheck.io/v2/{$ip}", [
+            // Make request to ProxyCheck.io API with enhanced parameters
+            $response = Http::timeout(5)->get("https://proxycheck.io/v2/{$ip}", [
                 'key' => $apiKey,
                 'vpn' => 1,
                 'asn' => 1,
@@ -1116,7 +1206,10 @@ class TrackOfferController extends Controller
                 'port' => 1,
                 'seen' => 1,
                 'days' => 7,
-                'tag' => 'visitor-tracking'
+                'tag' => 'visitor-tracking',
+                'time' => 1,
+                'inf' => 1, // Get more detailed information
+                'node' => 1  // Use multiple detection nodes for better accuracy
             ]);
 
             if ($response->successful()) {
